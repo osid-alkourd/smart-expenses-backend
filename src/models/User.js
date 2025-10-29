@@ -49,22 +49,6 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
-    emailConfirmToken: {
-        type: String,
-        optional: true
-    },
-    emailConfirmTokenIssuedAt: {
-        type: Date,
-        optional: true
-    },
-    passwordResetToken: {
-        type: String,
-        optional: true
-    },
-    passwordResetTokenIssuedAt: {
-        type: Date,
-        optional: true
-    },
     settings: {
         type: settingsSchema,
         default: () => ({})
