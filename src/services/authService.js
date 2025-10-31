@@ -1,7 +1,9 @@
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const EmailToken = require('../models/EmailToken');
 const userRepository = require('../repositories/userRepository');
 const emailService = require('./emailService');
+const { JWT_SECRET } = require('../config/env');
 
 /**
  * Generate secure random token
@@ -9,6 +11,19 @@ const emailService = require('./emailService');
  */
 const generateToken = () => {
     return crypto.randomBytes(32).toString('hex');
+};
+
+/**
+ * Generate JWT access token
+ * @param {String} userId - User ID
+ * @returns {String} - JWT token
+ */
+const generateAccessToken = (userId) => {
+    return jwt.sign(
+        { userId },
+        JWT_SECRET,
+        { expiresIn: '7d' } // Token expires in 7 days
+    );
 };
 
 /**
@@ -34,7 +49,7 @@ const createEmailConfirmationToken = async (userId) => {
 /**
  * Register new user
  * @param {Object} userData - User registration data (name, email, password)
- * @returns {Promise<Object>} - Created user object (without password)
+ * @returns {Promise<Object>} - Created user object (without password) and access token
  */
 const register = async (userData) => {
     // Check if user already exists
@@ -63,10 +78,17 @@ const register = async (userData) => {
         // Continue even if email fails - token is already saved
     }
 
-    // Return user without password
+    // Generate access token for immediate login
+    const accessToken = generateAccessToken(user._id.toString());
+
+    // Return user without password and access token
     const userObj = user.toObject();
     delete userObj.password;
-    return userObj;
+    
+    return {
+        user: userObj,
+        accessToken
+    };
 };
 
 /**
@@ -109,10 +131,50 @@ const verifyEmailToken = async (token) => {
     return userObj;
 };
 
+/**
+ * Login user
+ * @param {String} email - User email
+ * @param {String} password - User password
+ * @returns {Promise<Object>} - User object and access token
+ */
+const login = async (email, password) => {
+    // Find user by email
+    const user = await userRepository.findByEmail(email);
+    
+    if (!user) {
+        const error = new Error('Invalid email or password');
+        error.statusCode = 401;
+        throw error;
+    }
+
+    // Verify password
+    const isPasswordValid = await user.comparePassword(password);
+    
+    if (!isPasswordValid) {
+        const error = new Error('Invalid email or password');
+        error.statusCode = 401;
+        throw error;
+    }
+
+    // Generate access token
+    const accessToken = generateAccessToken(user._id.toString());
+
+    // Return user without password
+    const userObj = user.toObject();
+    delete userObj.password;
+
+    return {
+        user: userObj,
+        accessToken
+    };
+};
+
 module.exports = {
     register,
+    login,
     verifyEmailToken,
-    generateToken
+    generateToken,
+    generateAccessToken
 };
 
 

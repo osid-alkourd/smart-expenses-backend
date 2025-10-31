@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const authController = require('../controllers/authController');
-const { registerValidation, emailConfirmValidation, handleValidationErrors } = require('../validations/authValidation');
+const { registerValidation, loginValidation, emailConfirmValidation, handleValidationErrors } = require('../validations/authValidation');
 
 // Multer for handling multipart/form-data (without files)
 const upload = multer();
@@ -13,6 +13,13 @@ const upload = multer();
  * @access  Public
  */
 router.post('/register', upload.none(), registerValidation, handleValidationErrors, authController.register);
+
+/**
+ * @route   POST /api/auth/login
+ * @desc    Login user
+ * @access  Public
+ */
+router.post('/login', loginValidation, handleValidationErrors, authController.login);
 
 /**
  * @route   POST /api/auth/verify-email
