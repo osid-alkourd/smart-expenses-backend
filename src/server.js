@@ -1,3 +1,4 @@
+
 const express = require('express');
 const cors = require('cors');
 const connectDB = require('./config/db');
@@ -15,9 +16,11 @@ connectDB();
 
 // Routes
 const authRoutes = require('./routes/authRoutes');
+const receiptRoutes = require('./routes/receiptRoutes');
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/receipts', receiptRoutes);
 
 // Test route
 app.get('/', (req, res) => {
