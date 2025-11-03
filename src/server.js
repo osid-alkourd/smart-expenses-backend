@@ -17,10 +17,12 @@ connectDB();
 // Routes
 const authRoutes = require('./routes/authRoutes');
 const receiptRoutes = require('./routes/receiptRoutes');
+const expenseRoutes = require('./routes/expenseRoutes');
 
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/receipts', receiptRoutes);
+app.use('/api/expenses', expenseRoutes);
 
 // Test route
 app.get('/', (req, res) => {
