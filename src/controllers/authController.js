@@ -112,10 +112,39 @@ const login = async (req, res) => {
     }
 };
 
+/**
+ * Logout user
+ * POST /api/auth/logout
+ */
+const logout = async (req, res) => {
+    try {
+        // Since JWT tokens are stateless, we just confirm logout
+        // The client should discard the token on their end
+        // In a production system with token blacklisting, you would invalidate the token here
+        
+        res.status(200).json({
+            success: true,
+            message: 'Logout successful'
+        });
+    } catch (error) {
+        console.error('Logout error:', error);
+        
+        const statusCode = error.statusCode || 500;
+        const message = error.message || 'An error occurred during logout';
+
+        res.status(statusCode).json({
+            success: false,
+            message,
+            ...(process.env.NODE_ENV === 'development' && { error: error.stack })
+        });
+    }
+};
+
 module.exports = {
     register,
     login,
-    verifyEmail
+    verifyEmail,
+    logout
 };
 
 
