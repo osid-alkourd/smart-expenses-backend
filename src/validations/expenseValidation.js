@@ -106,6 +106,13 @@ const expenseFilterValidation = [
         .withMessage('Invalid end date format')
 ];
 
+const dashboardQueryValidation = [
+    query('year')
+        .optional({ checkFalsy: true })
+        .isInt({ min: 1900, max: 3000 })
+        .withMessage('Year must be a valid 4-digit number')
+];
+
 // Middleware to handle validation errors
 const handleValidationErrors = (req, res, next) => {
     const errors = validationResult(req);
@@ -127,6 +134,7 @@ module.exports = {
     updateExpenseValidation,
     expenseIdValidation,
     expenseFilterValidation,
+    dashboardQueryValidation,
     handleValidationErrors
 };
 

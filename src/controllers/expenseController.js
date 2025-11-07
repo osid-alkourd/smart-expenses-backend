@@ -30,7 +30,7 @@ const createExpense = async (req, res) => {
 };
 
 /**
- * Get expense by ID
+ * Get expense by ID with related receipt information
  * GET /api/expenses/:id
  */
 const getExpense = async (req, res) => {
@@ -148,11 +148,34 @@ const deleteExpense = async (req, res) => {
     }
 };
 
+const getDashboardSummary = async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const { year } = req.query;
+
+        const dashboard = await expenseService.getDashboardSummary(userId, year);
+
+        res.status(200).json({
+            success: true,
+            data: dashboard
+        });
+    } catch (error) {
+        const statusCode = error.statusCode || 500;
+        const message = error.message || 'Failed to fetch dashboard metrics';
+
+        res.status(statusCode).json({
+            success: false,
+            message
+        });
+    }
+};
+
 module.exports = {
     createExpense,
     getExpense,
     getUserExpenses,
     updateExpense,
-    deleteExpense
+    deleteExpense,
+    getDashboardSummary
 };
 

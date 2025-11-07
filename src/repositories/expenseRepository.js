@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Expense = require('../models/Expense');
 
 /**
@@ -79,6 +80,160 @@ const countByUserId = async (userId, filter = {}) => {
     return await Expense.countDocuments({ userId, ...filter });
 };
 
+const aggregateYearlyDashboard = async (userId, year) => {
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const startOfYear = new Date(year, 0, 1);
+    const endOfYear = new Date(year + 1, 0, 1);
+
+    const [result] = await Expense.aggregate([
+        {
+            $match: {
+                userId: userObjectId,
+                date: { $gte: startOfYear, $lt: endOfYear }
+            }
+        },
+        {
+            $facet: {
+                yearlyTotal: [
+                    {
+                        $group: {
+                            _id: null,
+                            totalAmount: { $sum: '$amount' },
+                            expenseCount: { $sum: 1 }
+                        }
+                    }
+                ],
+                categoryTotals: [
+                    {
+                        $group: {
+                            _id: {
+                                $cond: [
+                                    {
+                                        $or: [
+                                            { $eq: ['$category', null] },
+                                            { $eq: ['$category', ''] }
+                                        ]
+                                    },
+                                    'Uncategorized',
+                                    '$category'
+                                ]
+                            },
+                            totalAmount: { $sum: '$amount' },
+                            expenseCount: { $sum: 1 }
+                        }
+                    },
+                    {
+                        $project: {
+                            _id: 0,
+                            category: '$_id',
+                            totalAmount: 1,
+                            expenseCount: 1
+                        }
+                    },
+                    {
+                        $sort: { totalAmount: -1 }
+                    }
+                ],
+                monthlyTotals: [
+                    {
+                        $group: {
+                            _id: { month: { $month: '$date' } },
+                            totalAmount: { $sum: '$amount' },
+                            expenseCount: { $sum: 1 }
+                        }
+                    },
+                    {
+                        $project: {
+                            _id: 0,
+                            month: '$_id.month',
+                            totalAmount: 1,
+                            expenseCount: 1
+                        }
+                    },
+                    {
+                        $sort: { month: 1 }
+                    }
+                ]
+            }
+        }
+    ]);
+
+    const yearlyTotalEntry = result?.yearlyTotal?.[0] || {};
+
+    return {
+        totalAmount: yearlyTotalEntry.totalAmount || 0,
+        expenseCount: yearlyTotalEntry.expenseCount || 0,
+        categoryTotals: result?.categoryTotals || [],
+        monthlyTotals: result?.monthlyTotals || []
+    };
+};
+
+const aggregateAllTimeMetrics = async (userId) => {
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const now = new Date();
+    const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    const [result] = await Expense.aggregate([
+        {
+            $match: { userId: userObjectId }
+        },
+        {
+            $facet: {
+                totalExpenses: [
+                    {
+                        $group: {
+                            _id: null,
+                            totalAmount: { $sum: '$amount' },
+                            expenseCount: { $sum: 1 }
+                        }
+                    }
+                ],
+                distinctCategories: [
+                    {
+                        $match: {
+                            category: { $exists: true, $nin: [null, ''] }
+                        }
+                    },
+                    {
+                        $group: { _id: '$category' }
+                    },
+                    {
+                        $group: {
+                            _id: null,
+                            count: { $sum: 1 }
+                        }
+                    }
+                ],
+                currentMonthTotal: [
+                    {
+                        $match: {
+                            date: { $gte: startOfCurrentMonth, $lt: startOfNextMonth }
+                        }
+                    },
+                    {
+                        $group: {
+                            _id: null,
+                            totalAmount: { $sum: '$amount' }
+                        }
+                    }
+                ]
+            }
+        }
+    ]);
+
+    const totalExpensesEntry = result?.totalExpenses?.[0] || {};
+    const categoryCountEntry = result?.distinctCategories?.[0] || {};
+    const currentMonthEntry = result?.currentMonthTotal?.[0] || {};
+
+    return {
+        totalAmount: totalExpensesEntry.totalAmount || 0,
+        expenseCount: totalExpensesEntry.expenseCount || 0,
+        categoryCount: categoryCountEntry.count || 0,
+        currentMonthTotal: currentMonthEntry.totalAmount || 0
+    };
+};
+
 module.exports = {
     create,
     findById,
@@ -86,6 +241,8 @@ module.exports = {
     findByReceiptId,
     update,
     deleteById,
-    countByUserId
+    countByUserId,
+    aggregateYearlyDashboard,
+    aggregateAllTimeMetrics
 };
 

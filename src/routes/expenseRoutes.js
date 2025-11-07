@@ -7,6 +7,7 @@ const {
     updateExpenseValidation,
     expenseIdValidation,
     expenseFilterValidation,
+    dashboardQueryValidation,
     handleValidationErrors
 } = require('../validations/expenseValidation');
 
@@ -23,6 +24,13 @@ router.post('/', auth, createExpenseValidation, handleValidationErrors, expenseC
  * @access  Private
  */
 router.get('/', auth, expenseFilterValidation, handleValidationErrors, expenseController.getUserExpenses);
+
+/**
+ * @route   GET /api/expenses/dashboard
+ * @desc    Get dashboard metrics for a selected year
+ * @access  Private
+ */
+router.get('/dashboard', auth, dashboardQueryValidation, handleValidationErrors, expenseController.getDashboardSummary);
 
 /**
  * @route   GET /api/expenses/:id

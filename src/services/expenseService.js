@@ -1,5 +1,6 @@
 const expenseRepository = require('../repositories/expenseRepository');
 const receiptRepository = require('../repositories/receiptRepository');
+const receiptService = require('./receiptService');
 
 /**
  * Create expense from OCR data
@@ -60,10 +61,10 @@ const createExpense = async (expenseData, userId) => {
 };
 
 /**
- * Get expense by ID
+ * Get expense by ID with related receipt information
  * @param {String} expenseId - Expense ID
  * @param {String} userId - User ID (for authorization)
- * @returns {Promise<Object>} - Expense document
+ * @returns {Promise<Object>} - Expense document with populated receipt information
  */
 const getExpenseById = async (expenseId, userId) => {
     const expense = await expenseRepository.findById(expenseId);
@@ -78,6 +79,12 @@ const getExpenseById = async (expenseId, userId) => {
         const error = new Error('Access denied');
         error.statusCode = 403;
         throw error;
+    }
+
+    // Ensure receipt is populated (it should be from repository, but double-check)
+    if (!expense.receiptId || typeof expense.receiptId === 'string') {
+        // If receipt is not populated, populate it
+        await expense.populate('receiptId');
     }
 
     return expense;
@@ -156,7 +163,7 @@ const updateExpense = async (expenseId, updateData, userId) => {
 };
 
 /**
- * Delete expense
+ * Delete expense and related receipt
  * @param {String} expenseId - Expense ID
  * @param {String} userId - User ID (for authorization)
  * @returns {Promise<Object>} - Deleted expense document
@@ -176,9 +183,100 @@ const deleteExpense = async (expenseId, userId) => {
         throw error;
     }
 
+    // Store receipt ID before deleting expense
+    const receiptId = expense.receiptId?._id || expense.receiptId;
+
+    // Delete the expense first
     await expenseRepository.deleteById(expenseId);
 
+    // Delete the related receipt if it exists (this will also delete from Cloudinary)
+    if (receiptId) {
+        try {
+            // Use receiptService to ensure Cloudinary file is also deleted
+            await receiptService.deleteReceipt(receiptId.toString(), userId);
+            console.log(`✅ Successfully deleted receipt and Cloudinary file: ${receiptId}`);
+        } catch (error) {
+            // Log error but don't fail the expense deletion if receipt deletion fails
+            // The expense is already deleted, so we just log the error
+            console.error('Error deleting related receipt:', error);
+        }
+    }
+
     return expense;
+};
+
+const getDashboardSummary = async (userId, year) => {
+    const currentYear = new Date().getFullYear();
+    const numericYear = year ? Number(year) : currentYear;
+
+    if (!Number.isInteger(numericYear) || numericYear < 1900) {
+        const error = new Error('Year must be a valid integer (e.g., 2024)');
+        error.statusCode = 400;
+        throw error;
+    }
+
+    const [yearlyMetrics, allTimeMetrics] = await Promise.all([
+        expenseRepository.aggregateYearlyDashboard(userId, numericYear),
+        expenseRepository.aggregateAllTimeMetrics(userId)
+    ]);
+
+    const { totalAmount: yearlyTotal, expenseCount: yearlyExpenseCount, categoryTotals, monthlyTotals } = yearlyMetrics;
+
+    const categoryBreakdown = (categoryTotals || []).map((item) => ({
+        category: item.category,
+        totalAmount: item.totalAmount,
+        expenseCount: item.expenseCount,
+        percentageOfYear: yearlyTotal > 0 ? (item.totalAmount / yearlyTotal) * 100 : 0
+    }));
+
+    const topCategoryEntry = categoryBreakdown[0] || null;
+    const topCategory = topCategoryEntry
+        ? {
+            name: topCategoryEntry.category,
+            totalAmount: topCategoryEntry.totalAmount,
+            percentageOfYear: topCategoryEntry.percentageOfYear
+        }
+        : null;
+
+    const monthlyTotalsMap = new Map(
+        (monthlyTotals || []).map((item) => [item.month, item])
+    );
+
+    const monthlyComparison = Array.from({ length: 12 }, (_, index) => {
+        const monthNumber = index + 1;
+        const monthData = monthlyTotalsMap.get(monthNumber) || { totalAmount: 0, expenseCount: 0 };
+        const averagePerExpense = monthData.expenseCount ? monthData.totalAmount / monthData.expenseCount : 0;
+        const daysInMonth = new Date(numericYear, monthNumber, 0).getDate();
+        const averagePerDay = daysInMonth ? monthData.totalAmount / daysInMonth : 0;
+
+        return {
+            month: monthNumber,
+            totalAmount: monthData.totalAmount,
+            averagePerExpense,
+            averagePerDay,
+            expenseCount: monthData.expenseCount
+        };
+    });
+
+    const averageMonthlySpending = yearlyTotal / 12;
+
+    return {
+        selectedYear: numericYear,
+        yearlySummary: {
+            totalAmount: yearlyTotal,
+            expenseCount: yearlyExpenseCount,
+            averageMonthlySpending
+        },
+        topCategory,
+        categoryBreakdown,
+        monthlyComparison,
+        allTimeSummary: {
+            totalAmount: allTimeMetrics.totalAmount,
+            expenseCount: allTimeMetrics.expenseCount,
+            categoryCount: allTimeMetrics.categoryCount,
+            currentMonthTotal: allTimeMetrics.currentMonthTotal
+        }
+    };
 };
 
 module.exports = {
@@ -186,6 +284,7 @@ module.exports = {
     getExpenseById,
     getUserExpenses,
     updateExpense,
-    deleteExpense
+    deleteExpense,
+    getDashboardSummary
 };
 
