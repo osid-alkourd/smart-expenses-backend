@@ -210,7 +210,7 @@ const getDashboardSummary = async (userId, year) => {
     const numericYear = year ? Number(year) : currentYear;
 
     if (!Number.isInteger(numericYear) || numericYear < 1900) {
-        const error = new Error('Year must be a valid integer (e.g., 2024)');
+        const error = new Error('Year must be a valid integer (e.g., 2025)');
         error.statusCode = 400;
         throw error;
     }

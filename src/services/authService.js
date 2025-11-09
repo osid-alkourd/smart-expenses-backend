@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const EmailToken = require('../models/EmailToken');
 const userRepository = require('../repositories/userRepository');
 const emailService = require('./emailService');
+const cloudinary = require('../config/cloudinary');
 const { JWT_SECRET } = require('../config/env');
 
 /**
@@ -169,12 +170,170 @@ const login = async (email, password) => {
     };
 };
 
+/**
+ * Upload image to Cloudinary
+ * @param {Buffer} fileBuffer - File buffer
+ * @param {String} fileName - Original file name
+ * @param {String} mimeType - File MIME type
+ * @param {String} userId - User ID
+ * @returns {Promise<Object>} - Cloudinary upload result
+ */
+const uploadImageToCloudinary = (fileBuffer, fileName, mimeType, userId) => {
+    return new Promise((resolve, reject) => {
+        const uploadOptions = {
+            folder: `avatars/${userId}`,
+            resource_type: 'image',
+            public_id: `avatar_${Date.now()}`,
+            transformation: [
+                { width: 500, height: 500, crop: 'limit' },
+                { quality: 'auto' }
+            ]
+        };
+
+        const uploadStream = cloudinary.uploader.upload_stream(
+            uploadOptions,
+            (error, result) => {
+                if (error) {
+                    reject(error);
+                } else {
+                    resolve(result);
+                }
+            }
+        );
+
+        uploadStream.end(fileBuffer);
+    });
+};
+
+/**
+ * Update user profile
+ * @param {String} userId - User ID
+ * @param {Object} updateData - Data to update (name, newPassword, image file)
+ * @returns {Promise<Object>} - Updated user object (without password)
+ */
+const updateProfile = async (userId, updateData) => {
+    const { name, newPassword, confirmPassword, file } = updateData;
+    
+    // Validate password fields if password update is requested
+    if (newPassword || confirmPassword) {
+        if (!newPassword || !confirmPassword) {
+            const error = new Error('Both new password and confirm password are required to update password');
+            error.statusCode = 400;
+            throw error;
+        }
+        
+        if (newPassword !== confirmPassword) {
+            const error = new Error('Passwords do not match');
+            error.statusCode = 400;
+            throw error;
+        }
+    }
+
+    // Get current user
+    const user = await userRepository.findById(userId);
+    if (!user) {
+        const error = new Error('User not found');
+        error.statusCode = 404;
+        throw error;
+    }
+
+    let hasUpdates = false;
+
+    // Update name if provided
+    if (name) {
+        user.name = name.trim();
+        hasUpdates = true;
+    }
+
+    // Handle image upload if provided
+    if (file) {
+        // Validate that file is an image
+        const allowedImageTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'image/gif'];
+        if (!allowedImageTypes.includes(file.mimetype)) {
+            const error = new Error('Invalid file type. Only JPEG, PNG, WebP, and GIF images are allowed for avatar');
+            error.statusCode = 400;
+            throw error;
+        }
+
+        try {
+            // Upload to Cloudinary
+            const cloudinaryResult = await uploadImageToCloudinary(
+                file.buffer,
+                file.originalname,
+                file.mimetype,
+                userId
+            );
+            
+            user.avatarUrl = cloudinaryResult.secure_url;
+            hasUpdates = true;
+        } catch (error) {
+            console.error('Error uploading image:', error);
+            const uploadError = new Error('Failed to upload image to cloud storage');
+            uploadError.statusCode = 500;
+            throw uploadError;
+        }
+    }
+
+    // Update password if provided (must use save() to trigger password hashing)
+    if (newPassword) {
+        user.password = newPassword;
+        // Mark password as modified to trigger hashing
+        user.markModified('password');
+        hasUpdates = true;
+    }
+
+    // Check if there are any fields to update
+    if (!hasUpdates) {
+        const error = new Error('No fields provided to update');
+        error.statusCode = 400;
+        throw error;
+    }
+
+    // Save user (this will trigger password hashing if password was modified)
+    const updatedUser = await user.save();
+    
+    if (!updatedUser) {
+        const error = new Error('Failed to update user');
+        error.statusCode = 500;
+        throw error;
+    }
+
+    // Return user without password
+    const userObj = updatedUser.toObject();
+    delete userObj.password;
+    
+    return userObj;
+};
+
+/**
+ * Get user profile
+ * @param {String} userId - User ID
+ * @returns {Promise<Object>} - User object (without password)
+ */
+const getProfile = async (userId) => {
+    const user = await userRepository.findById(userId);
+    
+    if (!user) {
+        const error = new Error('User not found');
+        error.statusCode = 404;
+        throw error;
+    }
+
+    // Return user without password
+    const userObj = user.toObject();
+    delete userObj.password;
+    
+    return userObj;
+};
+
 module.exports = {
     register,
     login,
     verifyEmailToken,
     generateToken,
-    generateAccessToken
+    generateAccessToken,
+    updateProfile,
+    getProfile
 };
 
 

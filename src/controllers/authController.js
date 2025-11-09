@@ -140,11 +140,95 @@ const logout = async (req, res) => {
     }
 };
 
+/**
+ * Get user profile
+ * GET /api/auth/profile
+ */
+const getProfile = async (req, res) => {
+    try {
+        const user = await authService.getProfile(req.user.userId);
+
+        res.status(200).json({
+            success: true,
+            message: 'Profile retrieved successfully',
+            data: {
+                user: {
+                    id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    avatarUrl: user.avatarUrl || null,
+                    isEmailConfirmed: user.isEmailConfirmed,
+                    roles: user.roles,
+                    settings: user.settings,
+                    createdAt: user.createdAt,
+                    updatedAt: user.updatedAt
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Get profile error:', error);
+        
+        const statusCode = error.statusCode || 500;
+        const message = error.message || 'An error occurred while retrieving profile';
+
+        res.status(statusCode).json({
+            success: false,
+            message,
+            ...(process.env.NODE_ENV === 'development' && { error: error.stack })
+        });
+    }
+};
+
+/**
+ * Update user profile
+ * PUT /api/auth/profile
+ */
+const updateProfile = async (req, res) => {
+    try {
+        const { name, newPassword, confirmPassword } = req.body;
+        const file = req.file; // Multer file object
+        
+        const updatedUser = await authService.updateProfile(req.user.userId, {
+            name,
+            newPassword,
+            confirmPassword,
+            file
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'Profile updated successfully',
+            data: {
+                user: {
+                    id: updatedUser._id,
+                    name: updatedUser.name,
+                    email: updatedUser.email,
+                    avatarUrl: updatedUser.avatarUrl,
+                    isEmailConfirmed: updatedUser.isEmailConfirmed
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Update profile error:', error);
+        
+        const statusCode = error.statusCode || 500;
+        const message = error.message || 'An error occurred while updating profile';
+
+        res.status(statusCode).json({
+            success: false,
+            message,
+            ...(process.env.NODE_ENV === 'development' && { error: error.stack })
+        });
+    }
+};
+
 module.exports = {
     register,
     login,
     verifyEmail,
-    logout
+    logout,
+    getProfile,
+    updateProfile
 };
 
 

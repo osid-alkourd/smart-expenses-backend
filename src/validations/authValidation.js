@@ -55,6 +55,44 @@ const emailConfirmValidation = [
         .trim()
 ];
 
+// Validation rules for update profile
+const updateProfileValidation = [
+    body('name')
+        .optional()
+        .trim()
+        .notEmpty()
+        .withMessage('Name cannot be empty')
+        .isLength({ min: 2, max: 100 })
+        .withMessage('Name must be between 2 and 100 characters'),
+    body('newPassword')
+        .optional()
+        .notEmpty()
+        .withMessage('New password is required when updating password')
+        .isLength({ min: 8 })
+        .withMessage('Password must be at least 8 characters long')
+        .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+        .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number')
+        .custom((value, { req }) => {
+            if (value && !req.body.confirmPassword) {
+                throw new Error('Confirm password is required when updating password');
+            }
+            return true;
+        }),
+    body('confirmPassword')
+        .optional()
+        .notEmpty()
+        .withMessage('Confirm password is required when updating password')
+        .custom((value, { req }) => {
+            if (req.body.newPassword && value !== req.body.newPassword) {
+                throw new Error('Passwords do not match');
+            }
+            if (value && !req.body.newPassword) {
+                throw new Error('New password is required when confirming password');
+            }
+            return true;
+        })
+];
+
 // Middleware to handle validation errors
 const handleValidationErrors = (req, res, next) => {
     const errors = validationResult(req);
@@ -75,6 +113,7 @@ module.exports = {
     registerValidation,
     loginValidation,
     emailConfirmValidation,
+    updateProfileValidation,
     handleValidationErrors
 };
 
