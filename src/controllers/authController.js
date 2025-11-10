@@ -222,13 +222,71 @@ const updateProfile = async (req, res) => {
     }
 };
 
+/**
+ * Forget password - send reset code to email
+ * POST /api/auth/forget-password
+ */
+const forgetPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        const result = await authService.forgetPassword(email);
+
+        res.status(201).json({
+            success: result.success,
+            message: result.message
+        });
+    } catch (error) {
+        console.error('Forget password error:', error);
+        
+        const statusCode = error.statusCode || 500;
+        const message = error.message || 'An error occurred while processing your request';
+
+        res.status(statusCode).json({
+            success: false,
+            message,
+            ...(process.env.NODE_ENV === 'development' && { error: error.stack })
+        });
+    }
+};
+
+/**
+ * Reset password using verification code
+ * POST /api/auth/reset-password
+ */
+const resetPassword = async (req, res) => {
+    try {
+        const { code, newPassword, confirmPassword } = req.body;
+
+        const result = await authService.resetPassword(code, newPassword, confirmPassword);
+
+        res.status(201).json({
+            success: result.success,
+            message: result.message
+        });
+    } catch (error) {
+        console.error('Reset password error:', error);
+        
+        const statusCode = error.statusCode || 500;
+        const message = error.message || 'An error occurred while resetting your password';
+
+        res.status(statusCode).json({
+            success: false,
+            message,
+            ...(process.env.NODE_ENV === 'development' && { error: error.stack })
+        });
+    }
+};
+
 module.exports = {
     register,
     login,
     verifyEmail,
     logout,
     getProfile,
-    updateProfile
+    updateProfile,
+    forgetPassword,
+    resetPassword
 };
 
 

@@ -85,7 +85,72 @@ const sendEmailConfirmation = async (email, name, token) => {
     }
 };
 
+/**
+ * Send password reset code to user
+ * @param {String} email - User email address
+ * @param {String} name - User name
+ * @param {String} code - 7-digit verification code
+ * @returns {Promise} - Promise that resolves when email is sent
+ */
+const sendPasswordResetCode = async (email, name, code) => {
+    // Skip email sending if credentials are not configured
+    if (!MAILTRAP_USER || !MAILTRAP_PASS) {
+        console.warn(`⚠️  Email not sent to ${email} - Mailtrap credentials missing`);
+        console.warn(`📧 Password reset code: ${code}`);
+        return { success: false, message: 'Email credentials not configured' };
+    }
+
+    const mailOptions = {
+        from: EMAIL_FROM,
+        to: email,
+        subject: 'Password Reset Code - Smart Expense Tracker',
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #333;">Password Reset Request</h2>
+                <p>Hello ${name},</p>
+                <p>You have requested to reset your password. Please use the following verification code:</p>
+                <div style="text-align: center; margin: 30px 0;">
+                    <div style="background-color: #f5f5f5; border: 2px solid #4CAF50; border-radius: 8px; padding: 20px; display: inline-block;">
+                        <h1 style="color: #4CAF50; font-size: 36px; letter-spacing: 8px; margin: 0; font-family: 'Courier New', monospace;">
+                            ${code}
+                        </h1>
+                    </div>
+                </div>
+                <p style="color: #666;">This code will expire in 1 hour.</p>
+                <p>If you did not request a password reset, please ignore this email and your password will remain unchanged.</p>
+                <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+                <p style="color: #999; font-size: 12px;">Smart Expense Tracker Team</p>
+            </div>
+        `,
+        text: `
+            Password Reset Request
+            
+            Hello ${name},
+            
+            You have requested to reset your password. Please use the following verification code:
+            
+            ${code}
+            
+            This code will expire in 1 hour.
+            
+            If you did not request a password reset, please ignore this email and your password will remain unchanged.
+            
+            Smart Expense Tracker Team
+        `
+    };
+
+    try {
+        const info = await transporter.sendMail(mailOptions);
+        console.log('✅ Password reset email sent successfully:', info.messageId);
+        return { success: true, messageId: info.messageId };
+    } catch (error) {
+        console.error('❌ Error sending password reset email:', error.message);
+        throw error;
+    }
+};
+
 module.exports = {
-    sendEmailConfirmation
+    sendEmailConfirmation,
+    sendPasswordResetCode
 };
 

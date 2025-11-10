@@ -168,9 +168,54 @@ const requireRole = (...roles) => {
     };
 };
 
+/**
+ * Require guest (unauthenticated) - prevents authenticated users from accessing
+ * Used for routes like forget-password and reset-password
+ */
+const requireGuest = async (req, res, next) => {
+    try {
+        const authHeader = req.header('Authorization');
+        
+        // If no authorization header, user is not authenticated - allow access
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return next();
+        }
+
+        const token = authHeader.substring(7);
+        
+        if (!token) {
+            return next();
+        }
+
+        // Try to verify the token
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            const user = await userRepository.findById(decoded.userId);
+
+            // If user is found and token is valid, they are authenticated - deny access
+            if (user) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'This action is not available for authenticated users. Please logout first.'
+                });
+            }
+        } catch (error) {
+            // If token is invalid or expired, user is not authenticated - allow access
+            return next();
+        }
+
+        // If we get here, user is not authenticated - allow access
+        next();
+    } catch (error) {
+        // On any error, allow access (fail open for guest routes)
+        next();
+    }
+};
+
 module.exports = {
     auth,
     optionalAuth,
     requireEmailVerified,
-    requireRole
+    requireRole,
+    requireGuest
 };

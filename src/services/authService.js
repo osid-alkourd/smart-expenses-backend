@@ -15,6 +15,14 @@ const generateToken = () => {
 };
 
 /**
+ * Generate 7-digit verification code
+ * @returns {String} - 7-digit code
+ */
+const generateVerificationCode = () => {
+    return Math.floor(1000000 + Math.random() * 9000000).toString();
+};
+
+/**
  * Generate JWT access token
  * @param {String} userId - User ID
  * @returns {String} - JWT token
@@ -41,6 +49,29 @@ const createEmailConfirmationToken = async (userId) => {
         userId,
         type: 'email_confirm',
         token,
+        expiresAt
+    });
+
+    return await emailToken.save();
+};
+
+/**
+ * Create password reset token
+ * @param {String} userId - User ID
+ * @returns {Promise<Object>} - EmailToken document
+ */
+const createPasswordResetToken = async (userId) => {
+    // Delete any existing password reset tokens for this user
+    await EmailToken.deleteMany({ userId, type: 'password_reset' });
+
+    const code = generateVerificationCode();
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 1); // Token expires in 1 hour
+
+    const emailToken = new EmailToken({
+        userId,
+        type: 'password_reset',
+        token: code,
         expiresAt
     });
 
@@ -326,6 +357,95 @@ const getProfile = async (userId) => {
     return userObj;
 };
 
+/**
+ * Request password reset - sends verification code to user's email
+ * @param {String} email - User email address
+ * @returns {Promise<Object>} - Success message
+ */
+const forgetPassword = async (email) => {
+    // Find user by email
+    const user = await userRepository.findByEmail(email);
+    
+    // Don't reveal if user exists or not (security best practice)
+    if (!user) {
+        // Return success even if user doesn't exist to prevent email enumeration
+        return { success: true, message: 'If the email exists, a password reset code has been sent.' };
+    }
+
+    // Create password reset token
+    const emailToken = await createPasswordResetToken(user._id);
+
+    // Send password reset email
+    try {
+        await emailService.sendPasswordResetCode(user.email, user.name, emailToken.token);
+    } catch (error) {
+        console.error('Failed to send password reset email:', error);
+        // Delete the token if email fails
+        await EmailToken.deleteOne({ _id: emailToken._id });
+        const emailError = new Error('Failed to send password reset email');
+        emailError.statusCode = 500;
+        throw emailError;
+    }
+
+    // Return success message (don't reveal if user exists)
+    return { success: true, message: 'If the email exists, a password reset code has been sent.' };
+};
+
+/**
+ * Reset password using verification code
+ * @param {String} code - Verification code
+ * @param {String} newPassword - New password
+ * @param {String} confirmPassword - Confirm password
+ * @returns {Promise<Object>} - Success message
+ */
+const resetPassword = async (code, newPassword, confirmPassword) => {
+    // Validate passwords match
+    if (newPassword !== confirmPassword) {
+        const error = new Error('Passwords do not match');
+        error.statusCode = 400;
+        throw error;
+    }
+
+    // Find the password reset token
+    const emailToken = await EmailToken.findOne({
+        token: code,
+        type: 'password_reset'
+    });
+
+    if (!emailToken) {
+        const error = new Error('Invalid or expired verification code');
+        error.statusCode = 400;
+        throw error;
+    }
+
+    // Check if token is expired
+    if (new Date() > emailToken.expiresAt) {
+        // Delete expired token
+        await EmailToken.deleteOne({ _id: emailToken._id });
+        const error = new Error('Verification code has expired. Please request a new one.');
+        error.statusCode = 400;
+        throw error;
+    }
+
+    // Get user
+    const user = await userRepository.findById(emailToken.userId);
+    if (!user) {
+        const error = new Error('User not found');
+        error.statusCode = 404;
+        throw error;
+    }
+
+    // Update password (using save() to trigger password hashing)
+    user.password = newPassword;
+    user.markModified('password');
+    await user.save();
+
+    // Delete the used token
+    await EmailToken.deleteOne({ _id: emailToken._id });
+
+    return { success: true, message: 'Password has been reset successfully' };
+};
+
 module.exports = {
     register,
     login,
@@ -333,7 +453,9 @@ module.exports = {
     generateToken,
     generateAccessToken,
     updateProfile,
-    getProfile
+    getProfile,
+    forgetPassword,
+    resetPassword
 };
 
 
